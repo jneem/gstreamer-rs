@@ -13,13 +13,6 @@ use failure::Error;
 #[macro_use]
 extern crate failure_derive;
 
-#[path = "../examples-common.rs"]
-mod examples_common;
-
-#[derive(Debug, Fail)]
-#[fail(display = "Missing element {}", _0)]
-struct MissingElement(&'static str);
-
 #[derive(Debug, Fail)]
 #[fail(
     display = "Received error from {}: {} (debug: {:?})",
@@ -41,16 +34,12 @@ const HEIGHT: usize = 240;
 fn create_pipeline() -> Result<gst::Pipeline, Error> {
     gst::init()?;
 
-    let pipeline = gst::Pipeline::new(None);
-    let src = gst::ElementFactory::make("appsrc", None).ok_or(MissingElement("appsrc"))?;
-    let videoconvert =
-        gst::ElementFactory::make("videoconvert", None).ok_or(MissingElement("videoconvert"))?;
-    let sink =
-        gst::ElementFactory::make("autovideosink", None).ok_or(MissingElement("autovideosink"))?;
+    let pipeline = gst::parse_launch(
+        "appsrc name=src ! videoconvert ! x264enc ! mp4mux ! filesink location=test.mp4",
+    )?;
+    let pipeline = pipeline.downcast::<gst::Pipeline>().unwrap();
 
-    pipeline.add_many(&[&src, &videoconvert, &sink])?;
-    gst::Element::link_many(&[&src, &videoconvert, &sink])?;
-
+    let src = pipeline.get_by_name("src").unwrap();
     let appsrc = src
         .dynamic_cast::<gst_app::AppSrc>()
         .expect("Source element is expected to be an appsrc!");
@@ -105,8 +94,7 @@ fn create_pipeline() -> Result<gst::Pipeline, Error> {
 
                 // appsrc already handles the error here
                 let _ = appsrc.push_buffer(buffer);
-            })
-            .build(),
+            }).build(),
     );
 
     Ok(pipeline)
@@ -145,15 +133,9 @@ fn main_loop(pipeline: gst::Pipeline) -> Result<(), Error> {
     Ok(())
 }
 
-fn example_main() {
+fn main() {
     match create_pipeline().and_then(main_loop) {
         Ok(r) => r,
         Err(e) => eprintln!("Error! {}", e),
     }
-}
-
-fn main() {
-    // tutorials_common::run is only required to set up the application environent on macOS
-    // (but not necessary in normal Cocoa applications where this is set up autmatically)
-    examples_common::run(example_main);
 }
